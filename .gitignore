@@ -1,0 +1,7 @@
+.env
+__pycache__/
+cache/
+assets/*.png
+assets/*.webp
+.streamlit/
+*.pyc
