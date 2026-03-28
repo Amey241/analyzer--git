@@ -478,9 +478,9 @@ try:
             data_list = [data]
     else:
         with st.spinner(f"⚔️ Comparing **{username[0]}** vs **{username[1]}**…"):
-            d1 = run_pipeline(username[0].strip(), token)
-            d2 = run_pipeline(username[1].strip(), token)
-            data_list = [d1, d2]
+            data_a = run_pipeline(username[0].strip(), token)
+            data_b = run_pipeline(username[1].strip(), token)
+            data_list = [data_a, data_b]
 except ValueError as e:
     st.error(f"❌ {e}")
     st.stop()
