@@ -114,13 +114,15 @@ class GitHubFetcher:
             repo_commits = []
             if len(all_commits) < LDA_MAX_COMMITS:
                 try:
+                    # Get commits by author
                     for commit in repo.get_commits(author=username):
                         if len(all_commits) >= LDA_MAX_COMMITS:
                             break
-                        # author can be None for orphan/bot commits
+                        
                         author_info = commit.commit.author
                         if author_info is None or author_info.date is None:
                             continue
+                        
                         ts = author_info.date
                         message = commit.commit.message or ""
                         repo_commits.append({
@@ -128,6 +130,8 @@ class GitHubFetcher:
                             "timestamp": str(ts),
                             "hour": int(ts.hour),
                             "weekday": ts.strftime("%A"),
+                            "year": ts.year,
+                            "repo_lang": repo.language or "Unknown"
                         })
                     all_commits.extend(repo_commits)
                 except Exception:
@@ -196,7 +200,7 @@ class GitHubFetcher:
                 "low_open_issues": low_open_issues,
             })
 
-        # ---- issues & PRs authored ----
+        # ---- issues & PRs authored & reviews ----
         issues_authored = 0
         prs_authored = 0
         try:
@@ -213,3 +217,102 @@ class GitHubFetcher:
             "issues_authored": issues_authored,
             "prs_authored": prs_authored,
         }
+
+    def get_code_samples(self, username: str, limit: int = 5) -> list:
+        """Fetch raw code samples from the user's top repos for 'Code DNA' analysis."""
+        samples = []
+        try:
+            user = self.g.get_user(username)
+            repos = sorted(user.get_repos(type="public"), key=lambda r: r.stargazers_count, reverse=True)
+            
+            for repo in repos:
+                if repo.fork or repo.size == 0:
+                    continue
+                if len(samples) >= limit:
+                    break
+                
+                # Look for source files in common languages
+                exts = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb"]
+                try:
+                    contents = repo.get_contents("")
+                    for file in contents:
+                        if any(file.name.endswith(ext) for ext in exts):
+                            raw_content = repo.get_contents(file.path).decoded_content.decode("utf-8")
+                            samples.append({
+                                "repo": repo.name,
+                                "path": file.path,
+                                "content": raw_content,
+                                "lang": repo.language
+                            })
+                            if len(samples) >= limit:
+                                break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return samples
+
+    def get_review_comments(self, username: str, limit: int = 20) -> list:
+        """Fetch PR review comments left by the user."""
+        comments = []
+        try:
+            # This is harder via search, so we look at recent PRs the user participated in
+            # Or use events - actually search_issues with 'commenter' might work
+            # But the user specifically asked for reviews given
+            # For now, let's search for PRs where the user is a commenter
+            query = f"commenter:{username} is:pr"
+            issues = self.g.search_issues(query)
+            for issue in issues[:limit]:
+                # In PyGithub, search_issues returns Issue objects which can be PRs
+                if issue.pull_request:
+                    pr = issue.as_pull_request()
+                    reviews = pr.get_reviews()
+                    for review in reviews:
+                        if review.user and review.user.login == username and review.body:
+                            comments.append(review.body)
+                            if len(comments) >= limit:
+                                return comments
+        except Exception:
+            pass
+        return comments
+    def get_dependencies(self, username: str, limit: int = 10) -> dict:
+        """Fetch and parse manifest files to extract dependency names across repos."""
+        repo_deps = {}
+        try:
+            user = self.g.get_user(username)
+            repos = sorted(user.get_repos(type="public"), key=lambda r: r.stargazers_count, reverse=True)
+            
+            for repo in repos:
+                if repo.fork or repo.size == 0 or len(repo_deps) >= limit:
+                    continue
+                
+                deps = []
+                # Check for common manifest files
+                manifests = {
+                    "requirements.txt": r"^([a-zA-Z0-9\-_]+)",
+                    "package.json": r"\"([a-zA-Z0-9\-_@\/]+)\"\s*:",
+                    "Gemfile": r"gem\s+['\"]([^'\"]+)['\"]",
+                    "go.mod": r"require\s+([^\s]+)"
+                }
+                
+                for filename, pattern in manifests.items():
+                    try:
+                        file_content = repo.get_contents(filename).decoded_content.decode("utf-8")
+                        if filename == "package.json":
+                            # Smarter parse for package.json to avoid every key
+                            try:
+                                js = json.loads(file_content)
+                                deps.extend(js.get("dependencies", {}).keys())
+                                deps.extend(js.get("devDependencies", {}).keys())
+                            except Exception: pass
+                        else:
+                            matches = re.findall(pattern, file_content, re.MULTILINE)
+                            deps.extend(matches)
+                    except Exception:
+                        continue
+                
+                if deps:
+                    repo_deps[repo.name] = list(set(deps))
+        except Exception:
+            pass
+        return repo_deps

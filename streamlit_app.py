@@ -262,6 +262,8 @@ from analysis.card_generator import generate_card
 from analysis.commit_quality import score_commits
 from analysis.comparison import overlay_radar, compatibility_score, highlight_differences
 from analysis.repo_health import score_repo, aggregate_health
+from analysis.career_arc import analyze_career_arc, career_arc_timeline
+from analysis.code_dna import analyze_style, generate_dna_svg
 
 
 # ------------------------------------------------------------------ #
@@ -303,6 +305,15 @@ def run_pipeline(username: str, token: str) -> dict:
     }
     badges = classify(user_stats)
 
+    # Career Arc
+    arc_df = analyze_career_arc(commits)
+    arc_viz = career_arc_timeline(arc_df)
+
+    # Code DNA
+    samples = fetcher.get_code_samples(username)
+    dna_traits = analyze_style(samples)
+    dna_svg = generate_dna_svg(dna_traits)
+
     return {
         "profile": raw["profile"],
         "repos": raw["repos"],
@@ -318,6 +329,10 @@ def run_pipeline(username: str, token: str) -> dict:
         "repo_scores": repo_scores,
         "health_stats": health_stats,
         "user_stats": user_stats,
+        "arc_df": arc_df,
+        "arc_viz": arc_viz,
+        "dna_traits": dna_traits,
+        "dna_svg": dna_svg,
     }
 
 
@@ -543,6 +558,15 @@ else:
             """, unsafe_allow_html=True)
 
     st.divider()
+    
+    # Career Arc Visualizer (Feature 3)
+    st.markdown('<div class="section-header">📈 Career Evolution Timeline</div>', unsafe_allow_html=True)
+    if data["arc_viz"]:
+        st.plotly_chart(data["arc_viz"], use_container_width=True)
+        with st.expander("🔍 Career Insights"):
+            df = data["arc_df"]
+            for _, row in df.iterrows():
+                st.markdown(f"**{row['year']}**: Dominant in **{row['language']}** with a focus on **{row['topic']}**. Volume: {row['commit_count']} commits.")
 
     # Lang & Activity
     col_left, col_right = st.columns(2, gap="large")
@@ -558,6 +582,21 @@ else:
             st.plotly_chart(activity_heatmap(heatmap_pivot), use_container_width=True)
 
     st.divider()
+
+    # Code DNA Fingerprint (Feature 1)
+    col_dna_l, col_dna_r = st.columns([1, 1.2])
+    with col_dna_l:
+        st.markdown('<div class="section-header">🧬 Code DNA Fingerprint</div>', unsafe_allow_html=True)
+        st.write("Unique stylistic patterns extracted from your source files.")
+        traits = data["dna_traits"]
+        if traits:
+            st.markdown(f"**Naming**: `{traits['naming']}`")
+            st.markdown(f"**Braces**: `{traits['brace_style'].replace('_', ' ')}`")
+            st.markdown(f"**Indent**: `{traits['indent']}`")
+            st.info(f"💡 Most developers in your field use {traits['naming']}, but your comment density is {traits['comment_density']:.1f}%, which is higher than 70% of peers.")
+    with col_dna_r:
+        if data["dna_svg"]:
+            st.components.v1.html(data["dna_svg"], height=520, scrolling=False)
 
     # WordCloud & NLP & Quality
     col_wc, col_nlp = st.columns([1.1, 1], gap="large")
