@@ -331,7 +331,7 @@ def run_pipeline(username: str, token: str) -> dict:
     review_comments = fetcher.get_review_comments(username)
     review_personality = ai.analyze_review_personality(review_comments)
     
-    low_q_commits = [c["message"] for c in quality["low_score_commits"][:3]]
+    low_q_commits = [m for m, s, g in quality.get("worst_examples", [])[:3]]
     rewrites = ai.suggest_commit_rewrites(low_q_commits)
 
     # Deep Metrics
