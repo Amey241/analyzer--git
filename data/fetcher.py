@@ -113,103 +113,85 @@ class GitHubFetcher:
             # ---- commits (capped to avoid huge repos) ----
             repo_commits = []
             if len(all_commits) < LDA_MAX_COMMITS:
-                try:
-                    # Get commits by author
-                    for commit in repo.get_commits(author=username):
-                        if len(all_commits) >= LDA_MAX_COMMITS:
-                            break
-                        
-                        author_info = commit.commit.author
-                        if author_info is None or author_info.date is None:
-                            continue
-                        
+            try:
+                # 1. Commits (capped)
+                for commit in repo.get_commits(author=username)[:LDA_MAX_COMMITS]:
+                    author_info = commit.commit.author
+                    if author_info and author_info.date:
                         ts = author_info.date
-                        message = commit.commit.message or ""
                         repo_commits.append({
-                            "message": message.split("\n")[0],
+                            "message": (commit.commit.message or "").split("\n")[0],
                             "timestamp": str(ts),
-                            "hour": int(ts.hour),
+                            "hour": ts.hour,
                             "weekday": ts.strftime("%A"),
                             "year": ts.year,
                             "repo_lang": repo.language or "Unknown"
                         })
-                    all_commits.extend(repo_commits)
-                except Exception:
-                    pass
+                
+                # 2. Languages
+                langs = repo.get_languages()
+                
+                # 3. Health Signals
+                has_readme = False
+                try: repo.get_contents("README.md"); has_readme = True
+                except: pass
+                
+                has_license = False
+                try: repo.get_license(); has_license = True
+                except: pass
+                
+                has_ci = False
+                if index < 15:
+                    try: repo.get_contents(".github/workflows"); has_ci = True
+                    except: pass
+                
+                recently_active = False
+                if repo.pushed_at:
+                    recently_active = (datetime.now(timezone.utc) - repo.pushed_at.replace(tzinfo=timezone.utc)).days < 90
 
-            # ---- Repo Health Signals ----
-            has_license = False
-            has_ci = False
-            has_tests = False
-            recently_active = False
-            low_open_issues = True
+                contributor_count = 1
+                try: contributor_count = repo.get_contributors().totalCount
+                except: pass
 
-            # 1. License
-            try:
-                repo.get_license()
-                has_license = True
-            except GithubException:
-                pass
+                return {
+                    "repo_data": {
+                        "name": repo.name,
+                        "language": repo.language or "Unknown",
+                        "stars": repo.stargazers_count,
+                        "forks": repo.forks_count,
+                        "updated_at": str(repo.updated_at),
+                        "has_readme": has_readme,
+                        "has_license": has_license,
+                        "has_ci": has_ci,
+                        "recently_active": recently_active,
+                        "contributor_count": contributor_count,
+                        "user_contribution_count": len(repo_commits),
+                        "commit_count": repo.get_commits().totalCount if index < 10 else len(repo_commits) # Capped for speed
+                    },
+                    "commits": repo_commits,
+                    "languages": langs
+                }
+            except:
+                return None
 
-            # 2. Issues check
-            if repo.has_issues:
-                if repo.open_issues_count > 10:
-                    low_open_issues = False
-            
-            # 3. Recency
-            if repo.pushed_at:
-                days_since_push = (datetime.now(timezone.utc) - repo.pushed_at.replace(tzinfo=timezone.utc)).days
-                recently_active = (days_since_push < 90)
+        # Parallelize repo processing
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(process_repo, r, i) for i, r in enumerate(target_repos)]
+            for future in as_completed(futures):
+                res = future.result()
+                if res:
+                    repos_data.append(res["repo_data"])
+                    all_commits.extend(res["commits"])
+                    for l, v in res["languages"].items():
+                        lang_totals[l] = lang_totals.get(l, 0) + v
 
-            # Deep checks (CI and Tests) - throttled to 20 repos to save rate limit
-            if index < 20:
-                try:
-                    # Check for CI (.github/workflows)
-                    try:
-                        repo.get_contents(".github/workflows")
-                        has_ci = True
-                    except GithubException:
-                        pass
-                    
-                    # Check for Tests (top-level files matching patterns)
-                    try:
-                        contents = repo.get_contents("")
-                        test_patterns = ["test", "spec", "jest", "pytest", "unit", "e2e"]
-                        for item in contents:
-                            if any(p in item.name.lower() for p in test_patterns):
-                                has_tests = True
-                                break
-                    except GithubException:
-                        pass
-                except Exception:
-                    pass
-
-            repos_data.append({
-                "name": repo.name,
-                "language": repo.language or "Unknown",
-                "stars": repo.stargazers_count,
-                "forks": repo.forks_count,
-                "created_at": str(repo.created_at),
-                "updated_at": str(repo.updated_at),
-                "has_readme": has_readme,
-                "commit_count": len(repo_commits),
-                "has_license": has_license,
-                "has_ci": has_ci,
-                "has_tests": has_tests,
-                "recently_active": recently_active,
-                "low_open_issues": low_open_issues,
-                "contributor_count": int(repo.get_contributors().totalCount),
-                "user_contribution_count": sum(1 for c in repo_commits if c.get("author") == username),
-            })
-
-        # ---- issues & PRs authored & reviews ----
+        # PRs & Issues (Directly from search - fast enough)
         issues_authored = 0
         prs_authored = 0
         try:
-            issues_authored = int(self.g.search_issues(f"author:{username} is:issue").totalCount)
-            prs_authored = int(self.g.search_issues(f"author:{username} is:pr").totalCount)
-        except Exception:
-            pass
+            issues_authored = self.g.search_issues(f"author:{username} is:issue").totalCount
+            prs_authored = self.g.search_issues(f"author:{username} is:pr").totalCount
+        except: pass
 
         return {
             "profile": profile,
@@ -221,121 +203,100 @@ class GitHubFetcher:
         }
 
     def get_code_samples(self, username: str, limit: int = 5) -> list:
-        """Fetch raw code samples from the user's top repos for 'Code DNA' analysis."""
+        """Fetch raw code samples recursively in parallel."""
         samples = []
         try:
             user = self.g.get_user(username)
-            repos = sorted(user.get_repos(type="public"), key=lambda r: r.stargazers_count, reverse=True)
+            repos = sorted(user.get_repos(type="public"), key=lambda r: r.pushed_at, reverse=True)[:5]
             
-            for repo in repos:
-                if repo.fork or repo.size == 0:
-                    continue
-                if len(samples) >= limit:
-                    break
-                
-                # Look for source files in common languages
-                exts = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb"]
+            def fetch_from_repo(repo):
+                repo_samples = []
+                exts = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb", ".rs", ".php", ".swift"]
                 try:
-                    exts = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb", ".rs", ".php", ".swift"]
-                    # Get contents recursively (capped)
                     contents = repo.get_contents("")
-                    all_files = []
-                    while contents:
-                        file_content = contents.pop(0)
-                        if file_content.type == "dir" and file_content.name not in ["node_modules", ".git", "vendor", "dist", "env", "venv"]:
-                            contents.extend(repo.get_contents(file_content.path))
-                        elif any(file_content.name.endswith(ext) for ext in exts):
-                            all_files.append(file_content)
-                            if len(all_files) >= limit: break
-                    
-                    for file in all_files:
-                        raw_content = file.decoded_content.decode("utf-8")
-                        samples.append({
-                            "repo": repo.name,
-                            "path": file.path,
-                            "content": raw_content,
-                            "lang": repo.language
-                        })
-                        if len(samples) >= limit: break
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        return samples
+                    depth = 0
+                    while contents and len(repo_samples) < 2 and depth < 20:
+                        item = contents.pop(0)
+                        depth += 1
+                        if item.type == "dir" and item.name not in ["node_modules", ".git", "vendor", "dist", "env", "venv"]:
+                            try: contents.extend(repo.get_contents(item.path))
+                            except: pass
+                        elif any(item.name.endswith(ext) for ext in exts):
+                            try:
+                                repo_samples.append({
+                                    "repo": repo.name,
+                                    "path": item.path,
+                                    "content": item.decoded_content.decode("utf-8"),
+                                    "lang": repo.language
+                                })
+                            except: pass
+                except: pass
+                return repo_samples
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [executor.submit(fetch_from_repo, r) for r in repos]
+                for future in as_completed(futures):
+                    samples.extend(future.result())
+                    if len(samples) >= limit: break
+        except: pass
+        return samples[:limit]
 
     def get_review_comments(self, username: str, limit: int = 20) -> list:
-        """Fetch PR review comments left by the user."""
+        """Fetch PR review comments."""
         comments = []
         try:
-            # This is harder via search, so we look at recent PRs the user participated in
-            # Or use events - actually search_issues with 'commenter' might work
-            # But the user specifically asked for reviews given
-            # For now, let's search for PRs where the user is a commenter
             query = f"commenter:{username} is:pr"
             issues = self.g.search_issues(query)
-            for issue in issues[:limit]:
-                # In PyGithub, search_issues returns Issue objects which can be PRs
+            for issue in issues[:10]:
                 if issue.pull_request:
-                    pr = issue.as_pull_request()
-                    reviews = pr.get_reviews()
-                    for review in reviews:
-                        if review.user and review.user.login == username and review.body:
-                            comments.append(review.body)
-                            if len(comments) >= limit:
-                                return comments
-        except Exception:
-            pass
+                    try:
+                        pr = issue.as_pull_request()
+                        for review in pr.get_reviews():
+                            if review.user and review.user.login == username and review.body:
+                                comments.append(review.body)
+                                if len(comments) >= limit: return comments
+                    except: continue
+        except: pass
         return comments
+
     def get_dependencies(self, username: str, limit: int = 15) -> dict:
-        """Fetch and parse manifest files recursively to extract dependency names across repos."""
+        """Fetch and parse manifest files recursively in parallel."""
         repo_deps = {}
         try:
             user = self.g.get_user(username)
-            repos = sorted(user.get_repos(type="public"), key=lambda r: r.pushed_at, reverse=True)
+            repos = sorted(user.get_repos(type="public"), key=lambda r: r.pushed_at, reverse=True)[:15]
             
-            manifest_names = ["requirements.txt", "package.json", "Gemfile", "go.mod", "pom.xml", "build.gradle"]
-            
-            for repo in repos:
-                if repo.fork or repo.size == 0 or len(repo_deps) >= limit:
-                    continue
-                
-                # Check repo language to prioritize search
+            def fetch_deps(repo):
                 deps = []
+                manifest_names = ["requirements.txt", "package.json", "Gemfile", "go.mod"]
                 try:
-                    # Recursive search (capped depth)
                     contents = repo.get_contents("")
-                    all_manifests = []
-                    while contents and len(all_manifests) < 10:
-                        file_content = contents.pop(0)
-                        if file_content.type == "dir" and file_content.name not in ["node_modules", ".git", "vendor", "dist", "env", "venv"]:
-                            try:
-                                contents.extend(repo.get_contents(file_content.path))
+                    depth = 0
+                    while contents and len(deps) < 20 and depth < 30:
+                        item = contents.pop(0)
+                        depth += 1
+                        if item.type == "dir" and item.name not in ["node_modules", ".git", "vendor", "dist", "env", "venv"]:
+                            try: contents.extend(repo.get_contents(item.path))
                             except: pass
-                        elif file_content.name in manifest_names:
-                            all_manifests.append(file_content)
-                    
-                    for manifest in all_manifests:
-                        try:
-                            content = manifest.decoded_content.decode("utf-8")
-                            if manifest.name == "package.json":
-                                import json
-                                js = json.loads(content)
-                                deps.extend(js.get("dependencies", {}).keys())
-                                deps.extend(js.get("devDependencies", {}).keys())
-                            elif manifest.name == "requirements.txt":
-                                matches = re.findall(r"^([a-zA-Z0-9\-_]+)", content, re.MULTILINE)
-                                deps.extend(matches)
-                            elif manifest.name == "Gemfile":
-                                matches = re.findall(r"gem\s+['\"]([^'\"]+)['\"]", content)
-                                deps.extend(matches)
-                            elif manifest.name == "go.mod":
-                                matches = re.findall(r"require\s+([^\s]+)", content)
-                                deps.extend(matches)
-                        except: continue
-                except: continue
-                
-                if deps:
-                    repo_deps[repo.name] = list(set(deps))
-        except Exception:
-            pass
+                        elif item.name in manifest_names:
+                            try:
+                                content = item.decoded_content.decode("utf-8")
+                                if item.name == "package.json":
+                                    js = json.loads(content)
+                                    deps.extend(js.get("dependencies", {}).keys())
+                                    deps.extend(js.get("devDependencies", {}).keys())
+                                elif item.name == "requirements.txt":
+                                    deps.extend(re.findall(r"^([a-zA-Z0-9\-_]+)", content, re.MULTILINE))
+                                else:
+                                    deps.extend(re.findall(r"['\"]([^'\"]+)['\"]", content))
+                            except: pass
+                except: pass
+                return repo.name, list(set(deps))
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(fetch_deps, r) for r in repos]
+                for future in as_completed(futures):
+                    name, dlist = future.result()
+                    if dlist: repo_deps[name] = dlist
+        except: pass
         return repo_deps
