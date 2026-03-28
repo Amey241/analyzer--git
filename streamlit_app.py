@@ -631,13 +631,12 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-    # Feature 1: Code DNA Fingerprint
+    # Feature 1: Code DNA Fingerprint (Always show for discovery)
+    st.divider()
+    st.markdown('<div class="section-header">🧬 Code DNA Fingerprint</div>', unsafe_allow_html=True)
     if data.get("dna_svg"):
-        st.divider()
-        st.markdown('<div class="section-header">🧬 Code DNA Fingerprint</div>', unsafe_allow_html=True)
         col1, col2 = st.columns([1, 1.5], gap="large")
         with col1:
-            # Inline the SVG with scaling
             st.markdown(f'<div style="text-align:center; background: rgba(255,255,255,0.03); border-radius:30px; padding:20px;">{data["dna_svg"]}</div>', unsafe_allow_html=True)
         with col2:
             st.markdown("Every developer has unconscious stylistic patterns. We've mapped your unique coding fingerprint based on your most recent work.")
@@ -668,6 +667,8 @@ else:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+    else:
+        st.info("🧬 Analyzing your coding fingerprint... Please ensure your repositories have public source files (.py, .js, .ts, etc.) for a deep style audit.")
 
 
     # Feature 12: Hidden Achievements (Always try to show some)

@@ -236,18 +236,27 @@ class GitHubFetcher:
                 # Look for source files in common languages
                 exts = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb"]
                 try:
+                    exts = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb", ".rs", ".php", ".swift"]
+                    # Get contents recursively (capped)
                     contents = repo.get_contents("")
-                    for file in contents:
-                        if any(file.name.endswith(ext) for ext in exts):
-                            raw_content = repo.get_contents(file.path).decoded_content.decode("utf-8")
-                            samples.append({
-                                "repo": repo.name,
-                                "path": file.path,
-                                "content": raw_content,
-                                "lang": repo.language
-                            })
-                            if len(samples) >= limit:
-                                break
+                    all_files = []
+                    while contents:
+                        file_content = contents.pop(0)
+                        if file_content.type == "dir" and file_content.name not in ["node_modules", ".git", "vendor", "dist", "env", "venv"]:
+                            contents.extend(repo.get_contents(file_content.path))
+                        elif any(file_content.name.endswith(ext) for ext in exts):
+                            all_files.append(file_content)
+                            if len(all_files) >= limit: break
+                    
+                    for file in all_files:
+                        raw_content = file.decoded_content.decode("utf-8")
+                        samples.append({
+                            "repo": repo.name,
+                            "path": file.path,
+                            "content": raw_content,
+                            "lang": repo.language
+                        })
+                        if len(samples) >= limit: break
                 except Exception:
                     continue
         except Exception:
