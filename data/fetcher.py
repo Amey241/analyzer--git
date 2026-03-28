@@ -113,20 +113,20 @@ class GitHubFetcher:
             # ---- commits (capped to avoid huge repos) ----
             repo_commits = []
             if len(all_commits) < LDA_MAX_COMMITS:
-            try:
-                # 1. Commits (capped)
-                for commit in repo.get_commits(author=username)[:LDA_MAX_COMMITS]:
-                    author_info = commit.commit.author
-                    if author_info and author_info.date:
-                        ts = author_info.date
-                        repo_commits.append({
-                            "message": (commit.commit.message or "").split("\n")[0],
-                            "timestamp": str(ts),
-                            "hour": ts.hour,
-                            "weekday": ts.strftime("%A"),
-                            "year": ts.year,
-                            "repo_lang": repo.language or "Unknown"
-                        })
+                try:
+                    # 1. Commits (capped)
+                    for commit in repo.get_commits(author=username)[:LDA_MAX_COMMITS]:
+                        author_info = commit.commit.author
+                        if author_info and author_info.date:
+                            ts = author_info.date
+                            repo_commits.append({
+                                "message": (commit.commit.message or "").split("\n")[0],
+                                "timestamp": str(ts),
+                                "hour": ts.hour,
+                                "weekday": ts.strftime("%A"),
+                                "year": ts.year,
+                                "repo_lang": repo.language or "Unknown"
+                            })
                 
                 # 2. Languages
                 langs = repo.get_languages()
