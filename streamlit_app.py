@@ -851,28 +851,44 @@ else:
 
     # DEEP DATA METRICS SECTION
     st.divider()
-    col_bus, col_ghost = st.columns(2, gap="large")
-    
-    with col_bus:
-        st.markdown('<div class="section-header">🚌 Bus Factor Estimation</div>', unsafe_allow_html=True)
-        bus = data["bus_stats"]
+    with col_ghost:
+        st.markdown('<div class="section-header">🛡️ Invisible Work Audit</div>', unsafe_allow_html=True)
+        inv = data["invisible_stats"]
         st.markdown(f"""
         <div class="glass-card" style="padding:1.5rem;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
             <div>
-              <div style="font-size:0.8rem; color:#CBD5E1;">CENTRALIZATION RISK</div>
-              <div style="font-size:1.5rem; font-weight:700;">{bus['risk']}</div>
+              <div style="font-size:0.8rem; color:#CBD5E1;">PR REVIEWS</div>
+              <div style="font-size:1.5rem; font-weight:700; color:#22D3EE;">{inv['reviews']}</div>
             </div>
-            <div style="text-align:right;">
-              <div style="font-size:2rem; font-weight:800; color:#6C63FF;">{bus['avg_factor']}</div>
-              <div style="font-size:0.7rem; color:#E2E8F0;">AVG RATIO</div>
+            <div>
+              <div style="font-size:0.8rem; color:#CBD5E1;">TOTAL IMPACT</div>
+              <div style="font-size:1.5rem; font-weight:700; color:#EC4899;">{inv['total_impact']}</div>
             </div>
           </div>
           <div style="margin-top:1rem; font-size:0.85rem; color:#E2E8F0;">
-            A factor of 1 means you are the sole knowledge holder. Projects with high stars and low factors are 'knowledge silos'.
+            Beyond commits: you've authored <b>{inv['prs']}</b> PRs and <b>{inv['issues']}</b> issues. This is your "silent" influence on the codebase.
           </div>
         </div>
         """, unsafe_allow_html=True)
+
+    # Ghost Repo Audit (if any)
+    ghosts = data.get("ghosts", [])
+    if ghosts:
+        st.divider()
+        st.markdown('<div class="section-header">👻 Ghost Repo Audit</div>', unsafe_allow_html=True)
+        ghost_cols = st.columns(min(len(ghosts), 4))
+        for i, g in enumerate(ghosts[:4]):
+            with ghost_cols[i]:
+                st.markdown(f"""
+                <div class="glass-card" style="padding:0.8rem; border-color:#94A3B8;">
+                    <div style="font-weight:600; font-size:0.85rem; color:#FFFFFF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{g['name']}</div>
+                    <div style="font-size:0.75rem; color:#94A3B8; margin-top:0.3rem;">Inactive since {g['last_updated']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.info("These repositories haven't been touched in over a year. Consider archiving them to clear the air.")
+
+    st.divider()
 
 
 
