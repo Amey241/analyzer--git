@@ -12,14 +12,21 @@ def estimate_bus_factor(repos: list[dict]) -> dict:
     """
     factors = []
     for r in repos:
-        n_contribs = r.get("contributor_count", 1)
-        user_share = (r.get("user_contribution_count", 0) / r.get("commit_count", 1)) * 100
+        commits = r.get("commit_count", 0)
+        if commits == 0: continue
+        
+        n_contribs = max(r.get("contributor_count", 1), 1)
+        user_commits = r.get("user_contribution_count", 0)
+        user_share = (user_commits / commits) * 100
         
         # Heuristic: if one person does 80%+ work, factor is 1
         factor = 1 if user_share > 80 else 2 if user_share > 50 else 3 + (n_contribs // 5)
         factors.append({"repo": r["name"], "factor": factor, "user_share": user_share})
     
-    avg_factor = sum(f["factor"] for f in factors) / len(factors) if factors else 0
+    if not factors:
+        return {"factors": [], "avg_factor": 0, "risk": "N/A (No commits found)"}
+        
+    avg_factor = sum(f["factor"] for f in factors) / len(factors)
     risk = "High 🔴" if avg_factor < 1.5 else "Medium 🟡" if avg_factor < 3 else "Low 🟢"
     
     return {"factors": factors, "avg_factor": round(avg_factor, 1), "risk": risk}

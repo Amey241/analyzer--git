@@ -869,7 +869,7 @@ else:
 
     with col_ghost:
         st.markdown('<div class="section-header">🛡️ Invisible Work Audit</div>', unsafe_allow_html=True)
-        inv = data["invisible_stats"]
+        inv = data.get("invisible_stats", {"prs": 0, "issues": 0, "reviews": 0, "total_impact": 0, "is_empty": True})
         st.markdown(f"""
         <div class="glass-card" style="padding:1.5rem;">
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
@@ -883,7 +883,7 @@ else:
             </div>
           </div>
           <div style="margin-top:1rem; font-size:0.85rem; color:#E2E8F0;">
-            Beyond commits: you've authored <b>{inv['prs']}</b> PRs and <b>{inv['issues']}</b> issues. This is your "silent" influence on the codebase.
+            { 'Beyond commits: you contribute via <b>' + str(inv["reviews"]) + '</b> reviews. This is your "silent" influence.' if not inv.get("is_empty") else 'No public PRs, issues, or reviews found. This usually means you focus primarily on direct commits to main.' }
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -902,7 +902,7 @@ else:
                     <div style="font-size:0.75rem; color:#94A3B8; margin-top:0.3rem;">Inactive since {g['last_updated']}</div>
                 </div>
                 """, unsafe_allow_html=True)
-        st.info("These repositories haven't been touched in over a year. Consider archiving them to clear the air.")
+        st.info("💡 Pro-tip: Archiving inactive repos makes your GitHub profile look more maintained and focused.")
 
     st.divider()
 

@@ -286,41 +286,53 @@ class GitHubFetcher:
         except Exception:
             pass
         return comments
-    def get_dependencies(self, username: str, limit: int = 10) -> dict:
-        """Fetch and parse manifest files to extract dependency names across repos."""
+    def get_dependencies(self, username: str, limit: int = 15) -> dict:
+        """Fetch and parse manifest files recursively to extract dependency names across repos."""
         repo_deps = {}
         try:
             user = self.g.get_user(username)
-            repos = sorted(user.get_repos(type="public"), key=lambda r: r.stargazers_count, reverse=True)
+            repos = sorted(user.get_repos(type="public"), key=lambda r: r.pushed_at, reverse=True)
+            
+            manifest_names = ["requirements.txt", "package.json", "Gemfile", "go.mod", "pom.xml", "build.gradle"]
             
             for repo in repos:
                 if repo.fork or repo.size == 0 or len(repo_deps) >= limit:
                     continue
                 
+                # Check repo language to prioritize search
                 deps = []
-                # Check for common manifest files
-                manifests = {
-                    "requirements.txt": r"^([a-zA-Z0-9\-_]+)",
-                    "package.json": r"\"([a-zA-Z0-9\-_@\/]+)\"\s*:",
-                    "Gemfile": r"gem\s+['\"]([^'\"]+)['\"]",
-                    "go.mod": r"require\s+([^\s]+)"
-                }
-                
-                for filename, pattern in manifests.items():
-                    try:
-                        file_content = repo.get_contents(filename).decoded_content.decode("utf-8")
-                        if filename == "package.json":
-                            # Smarter parse for package.json to avoid every key
+                try:
+                    # Recursive search (capped depth)
+                    contents = repo.get_contents("")
+                    all_manifests = []
+                    while contents and len(all_manifests) < 10:
+                        file_content = contents.pop(0)
+                        if file_content.type == "dir" and file_content.name not in ["node_modules", ".git", "vendor", "dist", "env", "venv"]:
                             try:
-                                js = json.loads(file_content)
+                                contents.extend(repo.get_contents(file_content.path))
+                            except: pass
+                        elif file_content.name in manifest_names:
+                            all_manifests.append(file_content)
+                    
+                    for manifest in all_manifests:
+                        try:
+                            content = manifest.decoded_content.decode("utf-8")
+                            if manifest.name == "package.json":
+                                import json
+                                js = json.loads(content)
                                 deps.extend(js.get("dependencies", {}).keys())
                                 deps.extend(js.get("devDependencies", {}).keys())
-                            except Exception: pass
-                        else:
-                            matches = re.findall(pattern, file_content, re.MULTILINE)
-                            deps.extend(matches)
-                    except Exception:
-                        continue
+                            elif manifest.name == "requirements.txt":
+                                matches = re.findall(r"^([a-zA-Z0-9\-_]+)", content, re.MULTILINE)
+                                deps.extend(matches)
+                            elif manifest.name == "Gemfile":
+                                matches = re.findall(r"gem\s+['\"]([^'\"]+)['\"]", content)
+                                deps.extend(matches)
+                            elif manifest.name == "go.mod":
+                                matches = re.findall(r"require\s+([^\s]+)", content)
+                                deps.extend(matches)
+                        except: continue
+                except: continue
                 
                 if deps:
                     repo_deps[repo.name] = list(set(deps))
