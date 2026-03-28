@@ -256,7 +256,7 @@ from data.fetcher import GitHubFetcher
 from analysis.languages import aggregate_languages, radar_chart, bar_chart
 from analysis.activity import build_heatmap_data, activity_heatmap, peak_hours_summary
 from analysis.nlp import sentiment_analysis, lda_topics
-from analysis.personality import classify
+from analysis.personality import classify, generate_narrative, achievement_trophy_case, time_capsule_message
 from analysis.wordcloud_gen import generate_wordcloud
 from analysis.card_generator import generate_card
 from analysis.commit_quality import score_commits
@@ -264,6 +264,7 @@ from analysis.comparison import overlay_radar, compatibility_score, highlight_di
 from analysis.repo_health import score_repo, aggregate_health
 from analysis.career_arc import analyze_career_arc, career_arc_timeline
 from analysis.code_dna import analyze_style, generate_dna_svg
+from analysis.ecosystem import build_ecosystem_graph
 
 
 # ------------------------------------------------------------------ #
@@ -304,15 +305,22 @@ def run_pipeline(username: str, token: str) -> dict:
         "followers":       raw["profile"].get("followers", 0),
     }
     badges = classify(user_stats)
+    narrative = generate_narrative(user_stats, raw["profile"])
+    achievements = achievement_trophy_case(user_stats, raw["profile"], lang_df)
 
     # Career Arc
     arc_df = analyze_career_arc(commits)
     arc_viz = career_arc_timeline(arc_df)
+    capsule = time_capsule_message(arc_df, raw["profile"])
 
     # Code DNA
     samples = fetcher.get_code_samples(username)
     dna_traits = analyze_style(samples)
     dna_svg = generate_dna_svg(dna_traits)
+
+    # Dependency Ecosystem
+    repo_deps = fetcher.get_dependencies(username)
+    ecosystem_html = build_ecosystem_graph(repo_deps)
 
     return {
         "profile": raw["profile"],
@@ -333,6 +341,10 @@ def run_pipeline(username: str, token: str) -> dict:
         "arc_viz": arc_viz,
         "dna_traits": dna_traits,
         "dna_svg": dna_svg,
+        "ecosystem_html": ecosystem_html,
+        "narrative": narrative,
+        "achievements": achievements,
+        "capsule": capsule,
     }
 
 
@@ -524,6 +536,9 @@ else:
             <div class="profile-name">{profile['name']}</div>
             <div style="color:#E2E8F0;font-size:0.9rem;">@{profile['login']}</div>
             <div style="color:#CBD5E1;font-size:0.85rem;margin-top:0.2rem;">{profile['bio']}</div>
+            <div style="color:#FFFFFF; font-style:italic; font-size:1rem; margin-top:1rem; line-height:1.4;">
+              "{data['narrative']}"
+            </div>
             <div class="stat-row">
               <span class="stat-pill">📁 {profile['public_repos']} repos</span>
               <span class="stat-pill">👥 {profile['followers']} followers</span>
@@ -598,6 +613,15 @@ else:
         if data["dna_svg"]:
             st.components.v1.html(data["dna_svg"], height=520, scrolling=False)
 
+    st.divider()
+
+    # Dependency Ecosystem Map (Feature 10)
+    st.markdown('<div class="section-header">🕸 Dependency Ecosystem Map</div>', unsafe_allow_html=True)
+    if data["ecosystem_html"]:
+        st.components.v1.html(data["ecosystem_html"], height=520, scrolling=False)
+    else:
+        st.info("No manifest files (requirements.txt, package.json, etc.) found to build the ecosystem map.")
+
     # WordCloud & NLP & Quality
     col_wc, col_nlp = st.columns([1.1, 1], gap="large")
     with col_wc:
@@ -670,9 +694,19 @@ else:
             """, unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------------ #
-#  Footer
-# ------------------------------------------------------------------ #
+    # Time Capsule (Feature 13)
+    st.markdown(f"""
+    <div class="glass-card" style="border: 1px solid rgba(168,85,247,0.4); background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(108,99,255,0.05));">
+      <div style="font-size:0.75rem; color:#A855F7; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">🎞️ Time Capsule Message</div>
+      <div style="font-size:1.2rem; font-weight:600; color:#FFFFFF; line-height:1.5; font-style:italic;">
+        "{data['capsule']}"
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ------------------------------------------------------------------ #
+    #  Footer
+    # ------------------------------------------------------------------ #
 st.markdown("""
 <div style="text-align:center;padding:2rem 0 1rem;color:#475569;font-size:0.8rem;">
   Built with ❤️ using PyGithub · Streamlit · Plotly · scikit-learn · TextBlob · WordCloud
