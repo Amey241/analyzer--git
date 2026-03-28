@@ -231,7 +231,7 @@ def _render_topics(topics_data: dict) -> None:
 # ------------------------------------------------------------------ #
 #  Imports
 # ------------------------------------------------------------------ #
-import re
+import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
