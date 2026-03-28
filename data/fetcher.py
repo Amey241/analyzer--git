@@ -127,6 +127,7 @@ class GitHubFetcher:
                                 "year": ts.year,
                                 "repo_lang": repo.language or "Unknown"
                             })
+                except: pass
                 
                 # 2. Languages
                 langs = repo.get_languages()
