@@ -27,3 +27,12 @@ MANIFEST_FILES = [
 # Bus Factor Stats settings
 BUS_FACTOR_RETRIES = 3
 BUS_FACTOR_SLEEP = 2
+
+# LDA topic labels
+TOPIC_LABELS = ["bug", "feature", "refactor", "docs"]
+
+# Colors
+ACCENT_COLORS = [
+    "#6C63FF", "#FF6584", "#43DDE6", "#F9A826",
+    "#7ED957", "#FF8C42", "#A855F7", "#EC4899",
+]
