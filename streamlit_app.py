@@ -633,19 +633,58 @@ else:
 
     st.divider()
     
-    # Achievements Trophy Case (Feature 12)
-    unlocked = [a for a in data["achievements"] if a["unlocked"]]
-    if unlocked:
-        st.markdown('<div class="section-header" style="margin-top:1.5rem;">🏆 Hidden Achievements</div>', unsafe_allow_html=True)
-        ach_cols = st.columns(len(unlocked))
-        for i, a in enumerate(unlocked):
-            with ach_cols[i]:
-                st.markdown(f"""
-                <div class="badge-card" style="text-align:center; border-color:#F9A826;">
-                  <div style="font-size:2rem;">{a['emoji']}</div>
-                  <div style="font-weight:700; color:#F9A826;">{a['name']}</div>
+    # Feature 1: Code DNA Fingerprint
+    if data.get("dna_svg"):
+        st.markdown('<div class="section-header">🧬 Code DNA Fingerprint</div>', unsafe_allow_html=True)
+        col1, col2 = st.columns([1, 1.5], gap="large")
+        with col1:
+            # Inline the SVG with scaling
+            st.markdown(f'<div style="text-align:center; background: rgba(255,255,255,0.03); border-radius:30px; padding:20px;">{data["dna_svg"]}</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown("Every developer has unconscious stylistic patterns. We've mapped your unique coding fingerprint based on your most recent work.")
+            traits = data.get("dna_traits", {})
+            st.markdown(f"""
+            <div class="glass-card" style="padding:1.5rem; border-color:#6C63FF;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
+                    <div>
+                        <div style="color:#94A3B8; font-size:0.8rem;">Comment Density</div>
+                        <div style="font-size:1.3rem; font-weight:700;">{traits.get('comment_density', 0):.1f}%</div>
+                    </div>
+                    <div>
+                        <div style="color:#94A3B8; font-size:0.8rem;">Brace Style</div>
+                        <div style="font-size:1.3rem; font-weight:700;">{traits.get('brace_style', 'Standard').replace('_', ' ').title()}</div>
+                    </div>
+                    <div>
+                        <div style="color:#94A3B8; font-size:0.8rem;">Naming</div>
+                        <div style="font-size:1.3rem; font-weight:700;">{traits.get('naming', 'Default')}</div>
+                    </div>
+                    <div>
+                        <div style="color:#94A3B8; font-size:0.8rem;">Indentation</div>
+                        <div style="font-size:1.3rem; font-weight:700;">{traits.get('indent', 'Spaces').title()}</div>
+                    </div>
                 </div>
-                """, unsafe_allow_html=True)
+                <div style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid rgba(108,99,255,0.2);">
+                    <div style="color:#94A3B8; font-size:0.8rem;">Avg Function Length</div>
+                    <div style="font-size:1.3rem; font-weight:700;">{traits.get('avg_func_len', 15):.0f} lines</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # Feature 2 & 6: Developer Archetype & Time Capsule
+    st.markdown('<div class="section-header">📜 Developer Archetype & Story</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="glass-card" style="padding:2rem; border-left: 5px solid #F9A826;">
+        <div style="font-size:1.2rem; line-height:1.7; font-style:italic; color:#E2E8F0;">
+            "{data.get('narrative', 'Your story is still being written...')}"
+        </div>
+        <div style="margin-top:1.5rem; padding:1rem; background:rgba(249,168,38,0.1); border-radius:10px; border: 1px dashed rgba(249,168,38,0.3);">
+            <div style="font-size:0.8rem; color:#F9A826; font-weight:700; text-transform:uppercase;">Time Capsule Reflection</div>
+            <div style="margin-top:0.5rem; color:#E2E8F0;">{data.get('capsule', 'Keep pushing commits to see your career evolution.')}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
