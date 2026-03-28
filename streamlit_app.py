@@ -277,31 +277,7 @@ def run_pipeline(username: str, token: str) -> dict:
     fetcher = GitHubFetcher(token)
     raw = fetcher.get_user_data(username)
 
-    commits = raw["commits"]
-    messages = [c["message"] for c in commits]
-    hours    = [c["hour"]    for c in commits]
-    weekdays = [c["weekday"] for c in commits]
 
-    lang_df       = aggregate_languages(raw["lang_totals"])
-    heatmap_pivot = build_heatmap_data(commits)
-    activity      = peak_hours_summary(heatmap_pivot)
-    sentiment     = sentiment_analysis(messages)
-    topics        = lda_topics(messages)
-    wc_path       = generate_wordcloud(messages, username)
-
-    # Commit Quality
-    quality = score_commits(messages)
-
-    # Repo Health
-    repo_scores = [score_repo(r) for r in raw["repos"]]
-    health_stats = aggregate_health(repo_scores)
-
-    user_stats = {
-        "commit_hours":   hours,
-        "commit_weekdays": weekdays,
-        "repos":          raw["repos"],
-        "dominant_topic": topics["dominant_topic"],
-    
     # Pipeline Execution with Progress Tracking
     with st.status("🔍 Analyzing GitHub Profile...") as status:
         status.update(label="📡 Fetching repository & commit data...", state="running")
@@ -323,8 +299,18 @@ def run_pipeline(username: str, token: str) -> dict:
         quality = score_commit_quality(commits)
         repo_scores, health_stats = aggregate_repo_health(raw["repos"])
         
-        user_stats = aggregate_user_stats(raw["profile"], raw["repos"], commits)
-        badges = classify(commits, raw["repos"])
+        # User Stats for Personality/Narrative/Achievements
+        user_stats = {
+            "commit_hours":   [c["hour"] for c in commits],
+            "commit_weekdays": [c["weekday"] for c in commits],
+            "repos":          raw["repos"],
+            "dominant_topic": topics["dominant_topic"],
+            "avg_sentiment":  sentiment["avg_polarity"],
+            "prs_authored":   raw["prs_authored"],
+            "issues_authored": raw["issues_authored"],
+            "followers":       raw["profile"].get("followers", 0),
+        }
+        badges = classify(user_stats)
         narrative = generate_narrative(user_stats, raw["profile"])
         achievements = achievement_trophy_case(user_stats, raw["profile"], lang_df)
 
