@@ -263,10 +263,13 @@ from PIL import Image
 from datetime import datetime
 import nltk
 
-# Initialize NLTK data for Streamlit Cloud
+# Initialize NLTK data for Streamlit Cloud / Vercel
 @st.cache_resource
 def setup_nltk():
     try:
+        # If on Vercel, set NLTK data path to /tmp
+        if os.environ.get("VERCEL") == "1" or os.environ.get("ENVIRONMENT") == "vercel":
+            nltk.data.path.append("/tmp")
         nltk.download('punkt', quiet=True)
         nltk.download('brown', quiet=True)
         nltk.download('stopwords', quiet=True)

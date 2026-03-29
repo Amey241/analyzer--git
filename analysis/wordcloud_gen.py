@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 
-ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+IS_VERCEL = os.environ.get("VERCEL") == "1" or os.environ.get("ENVIRONMENT") == "vercel"
+ASSETS_DIR = "/tmp/assets" if IS_VERCEL else os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 
 EXTRA_STOPWORDS = {
     "merge", "pull", "request", "branch", "commit", "update", "change",
