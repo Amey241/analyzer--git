@@ -13,5 +13,5 @@ nltk==3.8.1
 PyGithub==2.1.1
 pillow==10.1.0
 pyvis==0.3.2
-anthropic==0.7.10
+anthropic>=0.34.0,<1.0.0
 gunicorn==21.2.0
