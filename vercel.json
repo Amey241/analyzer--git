@@ -1,7 +1,8 @@
 {
+  "version": 2,
   "builds": [
     {
-      "src": "streamlit_app.py",
+      "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "50mb",
@@ -12,14 +13,8 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "streamlit_app.py"
+      "dest": "api/index.py"
     }
   ],
-  "env": {
-    "STREAMLIT_SERVER_PORT": "8501",
-    "STREAMLIT_SERVER_ADDRESS": "0.0.0.0",
-    "STREAMLIT_SERVER_HEADLESS": "true",
-    "STREAMLIT_LOGGER_LEVEL": "info"
-  },
   "regions": ["iad1"]
 }
