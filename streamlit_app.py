@@ -144,7 +144,23 @@ st.markdown("""
     font-size: 1.2rem; font-weight: 800; color: #FFFFFF;
   }
 
-  #MainMenu, footer { visibility: hidden; }
+  /* Hide the Streamlit Toolbar (Share, Star, GitHub, etc.) */
+  header[data-testid="stHeader"] {
+    visibility: hidden;
+    height: 0%;
+  }
+
+  /* Hide the Main Menu and Footer */
+  #MainMenu, footer {
+    visibility: hidden;
+  }
+
+  /* Hide the "Manage app" button at the bottom right */
+  div[data-testid="stStatusWidgetText"], 
+  div[data-testid="stDecoration"],
+  [data-testid="stAppDeployButton"] {
+    display: none !important;
+  }
 
   input[type=text], .stTextInput input {
     background: rgba(0, 0, 0, 0.5) !important;
@@ -202,11 +218,6 @@ st.markdown("""
     color: #FFFFFF !important;
   }
 
-  /* Remove Streamlit white header bar */
-  header[data-testid="stHeader"], 
-  .stAppHeader {
-    background: transparent !important;
-  }
 </style>
 """, unsafe_allow_html=True)
 
